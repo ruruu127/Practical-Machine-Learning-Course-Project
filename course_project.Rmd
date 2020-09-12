@@ -1,0 +1,191 @@
+---
+title: "Practical Machine Learning (Johns Hopkins University) - Course Project"
+author: "Ruzaini Amiraa Roslan"
+date: "9/11/2020"
+output: html_document
+---
+
+# Overview
+## Background
+Using devices such as *Jawbone Up*, *Nike FuelBand*, and *Fitbit* it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how *much* of a particular activity they do, but they rarely quantify *how well they do it*. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website [here](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset).
+
+## Data
+The training data for this project are available [here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv).
+
+The test data are available [here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv).
+
+The data for this project come from this [source](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har).
+
+# Analysis
+## Data Loading and Preprocessing
+### Loading the Relevant Packages
+First step is to load the packages or libraries that we need for the analysis.
+
+```{r echo=TRUE, message=FALSE}
+library(caret)
+library(corrplot)
+library(rattle)
+library(rpart)
+```
+
+### Cleaning the Data
+The function `download.file()` is used to download the training and testing data; each are stored as csv files which are then loaded into the workspace using the `read.csv()` function. Then, the dimension, or the number of observations and variables, of both datasets are looked at.
+
+```{r echo=TRUE}
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = "train.csv")
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile = "test.csv")
+
+trainDF <- read.csv("train.csv")
+testDF <- read.csv("test.csv")
+
+# Dimension of training and test data
+data.frame(obs = c(dim(trainDF)[1], dim(testDF)[1]),
+           vars = c(dim(trainDF)[2], dim(testDF)[2]),
+           row.names = c("Training_Data", "Testing_Data"))
+```
+
+Next, we filter out the variables that contain missing values.
+
+```{r echo=TRUE}
+trainDF <- trainDF[,colSums(is.na(trainDF)) == 0]
+testDF <- testDF[,colSums(is.na(testDF)) == 0]
+
+# Look at the dimension
+data.frame(obs = c(dim(trainDF)[1], dim(testDF)[1]),
+           vars = c(dim(trainDF)[2], dim(testDF)[2]),
+           row.names = c("Training_Data", "Testing_Data"))
+```
+
+We see that the number of variables have decreased for both the training and testing data.
+
+Lastly, we remove the first seven variables that do not contribute much to the outcome.
+
+```{r echo=TRUE}
+trainDF <- trainDF[, -c(1:7)]
+testDF <- testDF[, -c(1:7)]
+data.frame(obs = c(dim(trainDF)[1], dim(testDF)[1]),
+           vars = c(dim(trainDF)[2], dim(testDF)[2]),
+           row.names = c("Training_Data", "Testing_Data"))
+```
+
+### Splitting the training data
+We split the training data as we fit the model. This is to ensure that we have a model that is as accurate as possible before we predict using the test data. Set the seed to 1234 for reproducible results.
+
+```{r echo=TRUE}
+set.seed(1234)
+inTrain <- createDataPartition(trainDF$classe, p = 0.7, list = FALSE)
+trainData <- trainDF[inTrain, ]
+testData <- trainDF[-inTrain, ]
+data.frame(obs = c(dim(trainData)[1], dim(testData)[1]),
+           vars = c(dim(trainData)[2], dim(testData)[2]),
+           row.names = c("Train_Data", "Test_Data"))
+```
+
+We also remove variables that have variance that are nearly zero. These variables might affect the model negatively due to their near-zero values.
+
+```{r echo=TRUE}
+NZV <- nearZeroVar(trainDF)
+trainData <- trainData[, -NZV]
+testData  <- testData[, -NZV]
+data.frame(obs = c(dim(trainData)[1], dim(testData)[1]),
+           vars = c(dim(trainData)[2], dim(testData)[2]),
+           row.names = c("Train_Data", "Test_Data"))
+```
+
+Plot a correlation plot to see which variables correlate with each other.
+
+```{r echo=TRUE}
+# Remove the outcome variable
+cor_mat <- cor(trainData[, -53])
+
+# Correlation plot
+corrplot(cor_mat, order = "FPC", method = "color", type = "upper", 
+         tl.cex = 0.8, tl.col = rgb(0, 0, 0))
+```
+
+For reference, based on the plot we see above, any two variables that have darker colors are highly correlated to one another. We can take a look at variables that are highly correlated to each other with the following code:
+
+```{r echo=TRUE}
+names(trainData)[findCorrelation(cor_mat, cutoff=0.75)]
+```
+
+## Model Building
+Three types of machine learning algorithms are used in this analysis. They are:
+
+* Classification tree
+* Random forest
+* Generalized Boosted Model
+
+### Classification tree
+
+```{r echo=TRUE}
+set.seed(1234)
+tree1 <- rpart(classe ~ ., data=trainData, method="class")
+fancyRpartPlot(tree1)
+```
+
+We then check the accuracy of the tree by testing it with `TestData`.
+
+```{r echo=TRUE}
+pred.tree1 <- predict(tree1, testData, type = "class")
+cm.tree <- confusionMatrix(pred.tree1, testData$classe)
+cm.tree
+```
+
+The accuracy of the model is 75.41%, which is okay.
+
+### Random forest
+The next model is a random forest model. Just like what we did with classification tree earlier, we first create the model and then check the accuracy of the model using the data from `testData`.
+
+```{r echo=TRUE}
+# Fitting the model
+set.seed(1234)
+control.rf <- trainControl(method="cv", number=3, verboseIter=FALSE)
+random.forest <- train(classe ~ ., data=trainData, method="rf", trControl=control.rf)
+random.forest$finalModel
+
+# Validating the model
+pred.forest <- predict(random.forest, newdata=testData)
+cm.forest <- confusionMatrix(pred.forest, testData$classe)
+cm.forest
+```
+
+This time, the model records a very high accuracy, which is 99.39%. But we shouldn't be too happy with this result as there may be the problem of overfitting in this model.
+
+### Generalized Boosted Model
+Once again, we follow the same steps: fitting the model first before validating it with `testData`.
+
+```{r echo=TRUE}
+# Fitting the model
+set.seed(1234)
+control.gbm <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+gbm  <- train(classe ~ ., data=trainData, method = "gbm", trControl = control.gbm, verbose = FALSE)
+gbm$finalModel
+
+# Validate the model
+pred.GBM <- predict(gbm, newdata=testData)
+cm.gbm <- confusionMatrix(pred.GBM, testData$classe)
+cm.gbm
+```
+
+The third model also has a high accuracy (96.7%).
+
+## Final Results
+Based on the three models that we have created, we see that the random forest model records the highest percentage of accuracy. 
+
+```{r echo=TRUE}
+accuracy <- data.frame(cm.tree$overall[1], cm.forest$overall[1], cm.gbm$overall[1])
+colnames(accuracy) <- c("Classification.Tree", "Random.Forest", "GBM")
+accuracy
+```
+
+Therefore we use this model to predict `testDF`.
+
+```{r echo=TRUE}
+predict(random.forest, newdata = testDF)
+```
+
+# Conclusion
+We have created three models based on three different machine learning algorithms. These algorithms are classification tree, random forest and generalized boosted model (GBM). Based on the accuracy percentages of each model, we found that the random forest model that is fitted with our data records the highest amount of accuracy percentage; therefore, we choose this model to predict our test data.
+
+However, it is worth noting that high accuracy does not necessarily mean that the model is the best. The high accuracy may indicate that the model may be overfitted. One way to make sure that the model is not overfitted is by conducting principal component analysis to select only the most significant features to be used in the model.
