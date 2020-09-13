@@ -132,7 +132,7 @@ cm.tree <- confusionMatrix(pred.tree1, testData$classe)
 cm.tree
 ```
 
-The accuracy of the model is 75.41%, which is okay.
+The accuracy of the model is 0.7541; therefore the out-of-sample error is 0.2459.
 
 ### Random forest
 The next model is a random forest model. Just like what we did with classification tree earlier, we first create the model and then check the accuracy of the model using the data from `testData`.
@@ -150,7 +150,7 @@ cm.forest <- confusionMatrix(pred.forest, testData$classe)
 cm.forest
 ```
 
-This time, the model records a very high accuracy, which is 99.39%. But we shouldn't be too happy with this result as there may be the problem of overfitting in this model.
+This time, the model records a very high accuracy, which is 0.9939. This means that the out-of-sample error is 0.0061. But we shouldn't be too happy with this result as there may be the problem of overfitting in this model.
 
 ### Generalized Boosted Model
 Once again, we follow the same steps: fitting the model first before validating it with `testData`.
@@ -168,15 +168,15 @@ cm.gbm <- confusionMatrix(pred.GBM, testData$classe)
 cm.gbm
 ```
 
-The third model also has a high accuracy (96.7%).
+The third model also has a high accuracy, at 0.967, with the out-of-sample error rate at 0.033. Again, we shouldn't be too excited with this result because this model may be overfitted.
 
 ## Final Results
-Based on the three models that we have created, we see that the random forest model records the highest percentage of accuracy. 
+Based on the three models that we have created, we see that the random forest model records the highest percentage of accuracy and smallest out-of-sample error rate. 
 
 ```{r echo=TRUE}
-accuracy <- data.frame(cm.tree$overall[1], cm.forest$overall[1], cm.gbm$overall[1])
-colnames(accuracy) <- c("Classification.Tree", "Random.Forest", "GBM")
-accuracy
+accuracy <- c(cm.tree$overall[1], cm.forest$overall[1], cm.gbm$overall[1])
+error <- 1-accuracy
+data.frame(accuracy = accuracy, out.of.sample.error = error, row.names = c("Classification.Tree", "Random.Forest", "GBM"))
 ```
 
 Therefore we use this model to predict `testDF`.
